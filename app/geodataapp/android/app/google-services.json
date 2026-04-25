@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "19334377908",
+    "project_id": "hackupc2026",
+    "storage_bucket": "hackupc2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:19334377908:android:9eaaf5393df7134c0e02e1",
+        "android_client_info": {
+          "package_name": "com.example.geodataapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMYLWiO3oWPUC_NwGgbYq87qkswrPHdlw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
