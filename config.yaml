@@ -1,0 +1,53 @@
+project:
+  name: hackupc26-qualcomm
+  output_dir: models  # all final ONNX + pkl files land here
+
+gpu:
+  device: auto   # auto | cpu | 0 | cuda:0
+  half: true     # FP16 mixed precision — safe on RTX 3060 12GB
+
+vision_model:
+  base_model: yolov8n-seg.pt
+  data: data/urban_landcover/building-facade-segmentation-augmention-1/data.yaml
+  epochs: 30
+  imgsz: 640
+  batch: 16       # ~3 GB VRAM with FP16; drop to 8 if OOM
+  workers: 4
+  project: vision_runs
+  name: roadside_model
+
+trash_model:
+  base_model: yolov8n-seg.pt   # fine-tune from COCO pretrained nano-seg
+  data: data/TACO/TACO-1/data.yaml
+  epochs: 25
+  imgsz: 640
+  batch: 8        # 59 classes = larger heads; 8 is safe on 12 GB with FP16
+  workers: 4
+  project: vision_runs
+  name: trash_model
+
+sensor_model:
+  data: data/vegetation_health/agriculture_dataset_with_target.csv
+  features:
+    - NDVI_Index             # direct vegetation health proxy — highest predictive signal
+    - Soil_Moisture          # primary plant-stress indicator
+    - Soil_Temperature       # affects root physiology and nutrient uptake
+    - Soil_pH                # governs macro/micro nutrient availability
+    - Air_Temperature
+    - Humidity
+    - Solar_Radiation_Noisy  # noisy version created at runtime (simulates photoresistor)
+  noise_source_col: Solar_Radiation
+  noise_std: 0.05
+  noise_seed: 42
+  target: Crop_Health
+  test_size: 0.2
+  random_state: 42
+  n_estimators: 100   # more trees for 7-feature ensemble
+  max_depth: 8        # deeper splits capture soil × climate interactions
+  n_jobs: -1          # use all CPU cores
+  output: models/tabular_rf_model.pkl
+
+onnx:
+  opset: 12       # Qualcomm NPU / Edge Impulse compatible opset
+  simplify: true
+  output_dir: models
