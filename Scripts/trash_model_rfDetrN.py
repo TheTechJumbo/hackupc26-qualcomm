@@ -1,1 +1,0 @@
-#Theres nothing here for now and doesn't need to be unless the trash_model fails
