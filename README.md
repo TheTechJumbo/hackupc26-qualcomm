@@ -1,4 +1,4 @@
-# hackupc26-qualcomm
+# Model dev - hackupc 2026 qualcomm
 
 Multi-modal edge AI pipeline for urban environmental monitoring. Trains three models (plant health sensor classification, building facade detection, trash detection) and exports them to ONNX opset 12 for Qualcomm NPU deployment via Edge Impulse.
 
