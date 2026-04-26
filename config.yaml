@@ -27,24 +27,35 @@ trash_model:
   name: trash_model
 
 sensor_model:
-  data: data/vegetation_health/agriculture_dataset_with_target.csv
-  features:
-    - NDVI_Index             # direct vegetation health proxy — highest predictive signal
-    - Soil_Moisture          # primary plant-stress indicator
-    - Soil_Temperature       # affects root physiology and nutrient uptake
-    - Soil_pH                # governs macro/micro nutrient availability
-    - Air_Temperature
+  data: data/vegetation_health/plant_health_data.csv
+  # Only atmospheric features — no soil or plant-specific sensors
+  raw_features:
+    - Light_Intensity
+    - Ambient_Temperature
     - Humidity
-    - Solar_Radiation_Noisy  # noisy version created at runtime (simulates photoresistor)
-  noise_source_col: Solar_Radiation
-  noise_std: 0.05
-  noise_seed: 42
-  target: Crop_Health
-  test_size: 0.2
+  # Rolling window: 4 readings × 6h interval = 24h trend window per feature.
+  # At inference the device maintains a circular buffer of the last 4 readings;
+  # no Plant_ID is needed because the buffer captures the local temporal context.
+  rolling_window: 4
+  # Final 6-feature vector fed to the model (raw + 24h rolling means).
+  features:
+    - Light_Intensity
+    - Ambient_Temperature
+    - Humidity
+    - Light_Intensity_24h_mean
+    - Ambient_Temperature_24h_mean
+    - Humidity_24h_mean
+  timestamp_col: Timestamp
+  plant_id_col: Plant_ID
+  target: Plant_Health_Status
+  # Label encoding: Healthy=0, Moderate Stress=1, High Stress=2.
+  # Binary target: can_grow=1 when stress_level <= healthy_threshold, else 0.
+  healthy_threshold: 1
+  test_size: 0.2         # used for plant-aware split (last 20% of plants -> test)
   random_state: 42
-  n_estimators: 100   # more trees for 7-feature ensemble
-  max_depth: 8        # deeper splits capture soil × climate interactions
-  n_jobs: -1          # use all CPU cores
+  n_estimators: 100
+  max_depth: 8
+  n_jobs: -1
   output: models/tabular_rf_model.pkl
 
 onnx:

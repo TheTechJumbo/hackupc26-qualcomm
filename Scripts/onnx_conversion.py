@@ -1,7 +1,10 @@
 """
-ONNX Conversion — exports both models to ONNX for Edge Impulse ingestion.
+ONNX Conversion — exports all models to ONNX for Edge Impulse ingestion.
 
-Part A: RandomForest (sklearn)   → models/tabular_rf_model.onnx  (disabled)
+Part A: RandomForest (sklearn)   → models/tabular_rf_model.onnx
+        6 float32 inputs (Light_Intensity, Ambient_Temperature, Humidity +
+        their 24h rolling means), 1 binary output (can_grow: 0=false, 1=true).
+        Upload to Edge Impulse → Classification (tabular).
 Part B: YOLO11 roadside model    → models/vision_roadside_model.onnx
 Part C: YOLO11 trash model       → models/trash_model.onnx
 
@@ -14,9 +17,23 @@ import sys
 from pathlib import Path
 
 import joblib
+import onnx.helper as _onnx_helper
 import yaml
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
+
+# skl2onnx 1.17.0 emits Python booleans for nodes_missing_value_tracks_true,
+# but onnx >= 1.16 strictly requires ints in .ints fields.
+_orig_make_attribute = _onnx_helper.make_attribute
+
+
+def _make_attribute_int_safe(key, value, doc_string=None, attr_type=None):
+    if isinstance(value, (list, tuple)):
+        value = type(value)(int(v) if isinstance(v, bool) else v for v in value)
+    return _orig_make_attribute(key, value, doc_string=doc_string, attr_type=attr_type)
+
+
+_onnx_helper.make_attribute = _make_attribute_int_safe
 
 ROOT = Path(__file__).parent.parent
 CONFIG_PATH = ROOT / "config.yaml"
@@ -98,13 +115,13 @@ def main() -> None:
 
     # --- Part A: Tabular RandomForest ---
     log.info("--- Part A: Tabular RF → ONNX ---")
-    #convert_sensor_model(cfg["sensor_model"], onnx_cfg, out_dir, log)
+    convert_sensor_model(cfg["sensor_model"], onnx_cfg, out_dir, log)
 
     # --- Part B: Roadside vision model ---
     log.info("--- Part B: Roadside Vision Model → ONNX ---")
     vc = cfg["vision_model"]
-    roadside_weights = ROOT / vc["project"] / vc["name"] / "weights" / "best.pt"
-    convert_yolo_model(roadside_weights, out_dir / "vision_roadside_model.onnx", onnx_cfg, log)
+    #roadside_weights = ROOT / vc["project"] / vc["name"] / "weights" / "best.pt"
+    #convert_yolo_model(roadside_weights, out_dir / "vision_roadside_model.onnx", onnx_cfg, log)
 
     # --- Part C: Trash model ---
     log.info("--- Part C: Trash Model → ONNX ---")

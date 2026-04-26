@@ -23,8 +23,8 @@ ROOT = Path(__file__).parent
 SCRIPTS = ROOT / "Scripts"
 
 STAGES = [
-    #("sensor",  SCRIPTS / "sensor_processing.py"),
-    ("vision",  SCRIPTS / "land_use.py"),
+    ("sensor",  SCRIPTS / "sensor_processing.py"),
+    #("vision",  SCRIPTS / "land_use.py"),
     #("trash",   SCRIPTS / "trash_model.py"),
     ("convert", SCRIPTS / "onnx_conversion.py"),
 ]
