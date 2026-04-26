@@ -1,1 +1,0 @@
-# hackupc26-qualcomm
