@@ -267,7 +267,7 @@ function asyncHandler(
 app.get('/api/health', (_request, response) => {
   response.json({
     status: 'ok',
-    service: 'barcelona-bike-sensing-backend'
+    service: 'ecodragon-backend'
   });
 });
 
@@ -346,5 +346,5 @@ app.use((error: unknown, _request: Request, response: Response, _next: NextFunct
 });
 
 app.listen(port, () => {
-  console.log(`Barcelona Bike Sensing API listening on http://localhost:${port}`);
+  console.log(`EcoDragon API listening on http://localhost:${port}`);
 });

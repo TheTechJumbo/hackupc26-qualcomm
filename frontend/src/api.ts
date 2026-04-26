@@ -1,44 +1,80 @@
-import type { Ride } from './types';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { CityScanRecord, ToxicityLevel } from './types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+type CityScanRow = {
+  id: string | number;
+  latitude: number | string | null;
+  longitude: number | string | null;
+  temperature: number | string | null;
+  humidity: number | string | null;
+  trash_detected: boolean | null;
+  toxicity_level: string | null;
+  device_timestamp: string | null;
+};
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers
-    },
-    ...options
-  });
+let supabaseClient: SupabaseClient | null = null;
 
-  const data = (await response.json()) as T & { error?: string; details?: string[] };
+function getSupabaseClient(): SupabaseClient {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-  if (!response.ok) {
-    const details = data.details?.length ? `: ${data.details.join(', ')}` : '';
-    throw new Error(`${data.error ?? 'Request failed'}${details}`);
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY. Add them to frontend/.env.local.');
   }
 
-  return data;
+  if (!supabaseClient) {
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
+      }
+    });
+  }
+
+  return supabaseClient;
 }
 
-export async function fetchRides(): Promise<Ride[]> {
-  const data = await request<{ rides: Ride[] }>('/api/rides');
-  return data.rides;
+function isToxicityLevel(value: unknown): value is ToxicityLevel {
+  return value === 'High' || value === 'Medium';
 }
 
-export async function uploadRide(ride: unknown): Promise<Ride> {
-  const data = await request<{ ride: Ride }>('/api/rides', {
-    method: 'POST',
-    body: JSON.stringify(ride)
-  });
+function toNumber(value: number | string | null, field: string): number {
+  const numericValue = Number(value);
 
-  return data.ride;
+  if (!Number.isFinite(numericValue)) {
+    throw new Error(`Supabase returned an invalid ${field} value.`);
+  }
+
+  return numericValue;
 }
 
-export async function resetDemoRides(): Promise<Ride[]> {
-  const data = await request<{ rides: Ride[] }>('/api/demo/reset', {
-    method: 'POST'
-  });
+function normalizeCityScan(row: CityScanRow): CityScanRecord {
+  if (!row.device_timestamp) {
+    throw new Error('Supabase returned a row without device_timestamp.');
+  }
 
-  return data.rides;
+  return {
+    id: String(row.id),
+    latitude: toNumber(row.latitude, 'latitude'),
+    longitude: toNumber(row.longitude, 'longitude'),
+    temperature: toNumber(row.temperature, 'temperature'),
+    humidity: toNumber(row.humidity, 'humidity'),
+    trash_detected: Boolean(row.trash_detected),
+    toxicity_level: isToxicityLevel(row.toxicity_level) ? row.toxicity_level : 'Medium',
+    device_timestamp: row.device_timestamp
+  };
+}
+
+export async function fetchCityScans(): Promise<CityScanRecord[]> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('city_scans')
+    .select('id, latitude, longitude, temperature, humidity, trash_detected, toxicity_level, device_timestamp')
+    .order('device_timestamp', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as CityScanRow[]).map(normalizeCityScan);
 }

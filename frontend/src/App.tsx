@@ -1,717 +1,775 @@
 import L from 'leaflet';
 import {
-  AlertTriangle,
-  Bike,
-  Clock3,
-  FileJson,
-  Gauge,
-  Layers,
-  Lightbulb,
-  ListChecks,
+  AlertCircle,
+  CheckCircle2,
+  Database,
+  Droplets,
+  Filter,
+  Flame,
+  LocateFixed,
   MapPinned,
-  RadioTower,
-  RotateCcw,
-  Route as RouteIcon,
-  Satellite,
+  RefreshCw,
+  Table2,
   Thermometer,
-  Upload
+  Trash2,
+  XCircle
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
-import { fetchRides, resetDemoRides, uploadRide } from './api';
-import { average, formatLabel, formatTime, getDistanceKm, getRideMinutes, isAnomaly } from './metrics';
-import type { LayerState, Ride, RideEvent } from './types';
+import type { LucideIcon } from 'lucide-react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, Marker, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { fetchCityScans } from './api';
+import { generateFakeCityScans } from './fakeData';
+import type {
+  CityScanRecord,
+  DataMode,
+  ScanFilters,
+  SummaryMetric,
+  ToxicityLevel,
+  ToxicityLevelFilter,
+  TrashStatusFilter
+} from './types';
 
-const defaultLayers: LayerState = {
-  temperature: true,
-  light: true,
-  labels: true,
-  anomalies: true
+const barcelonaCenter: [number, number] = [41.3874, 2.1686];
+
+const defaultFilters: ScanFilters = {
+  trashStatus: 'all',
+  toxicityLevel: 'all',
+  startTimestamp: '',
+  endTimestamp: '',
+  minTemperature: '',
+  maxTemperature: '',
+  minHumidity: '',
+  maxHumidity: ''
 };
 
-const labelPalette = [
-  '#2563eb',
-  '#0f766e',
-  '#7c3aed',
-  '#b45309',
-  '#0369a1',
-  '#4d7c0f',
-  '#be123c'
-];
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
 
-function colorFromString(value: string): string {
-  const total = [...value].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return labelPalette[total % labelPalette.length];
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
 }
 
-function temperatureColor(value: number): string {
-  if (value >= 24) {
-    return '#dc2626';
+function formatShortTime(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
   }
 
-  if (value >= 22.5) {
-    return '#ea580c';
-  }
-
-  if (value >= 21) {
-    return '#d97706';
-  }
-
-  return '#0891b2';
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
 }
 
-function lightColor(value: number): string {
-  if (value >= 750) {
-    return '#f59e0b';
-  }
-
-  if (value >= 550) {
-    return '#84cc16';
-  }
-
-  if (value >= 350) {
-    return '#06b6d4';
-  }
-
-  return '#475569';
-}
-
-function markerColor(event: RideEvent, layers: LayerState): string {
-  if (layers.anomalies && isAnomaly(event)) {
-    return '#dc2626';
-  }
-
-  if (layers.labels) {
-    return colorFromString(event.aiLabel);
-  }
-
-  if (layers.temperature) {
-    return temperatureColor(event.temperature);
-  }
-
-  if (layers.light) {
-    return lightColor(event.light);
-  }
-
-  return '#2563eb';
-}
-
-function visibleForLayers(event: RideEvent, layers: LayerState): boolean {
-  if (layers.temperature || layers.light || layers.labels) {
-    return true;
-  }
-
-  return layers.anomalies && isAnomaly(event);
-}
-
-function getTimelinePosition(event: RideEvent, ride: Ride): number {
-  const started = Date.parse(ride.startedAt);
-  const ended = Date.parse(ride.endedAt);
-  const eventTime = Date.parse(event.timestamp);
-
-  if (!Number.isFinite(started) || !Number.isFinite(ended) || !Number.isFinite(eventTime) || ended <= started) {
+function average(values: number[]): number {
+  if (values.length === 0) {
     return 0;
   }
 
-  return Math.min(100, Math.max(0, ((eventTime - started) / (ended - started)) * 100));
+  return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
-function createEventIcon(color: string, selected: boolean): L.DivIcon {
+function markerColor(record: CityScanRecord): string {
+  return record.toxicity_level === 'High' ? '#dc2626' : '#eab308';
+}
+
+function createMarkerIcon(record: CityScanRecord, selected: boolean): L.DivIcon {
+  const classes = ['scan-marker-dot', record.toxicity_level.toLowerCase()];
+
+  if (selected) {
+    classes.push('selected');
+  }
+
   return L.divIcon({
-    className: 'event-marker',
-    html: `<span class="${selected ? 'event-marker-dot selected' : 'event-marker-dot'}" style="background:${color}"></span>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-    popupAnchor: [0, -12]
+    className: 'scan-marker',
+    html: `<span class="${classes.join(' ')}" style="background:${markerColor(record)}"></span>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -13]
   });
 }
 
-function MapBounds({ ride }: { ride: Ride }) {
-  const map = useMap();
+function filterRecords(records: CityScanRecord[], filters: ScanFilters): CityScanRecord[] {
+  const start = filters.startTimestamp ? Date.parse(filters.startTimestamp) : null;
+  const end = filters.endTimestamp ? Date.parse(filters.endTimestamp) : null;
+  const minTemperature = filters.minTemperature === '' ? null : Number(filters.minTemperature);
+  const maxTemperature = filters.maxTemperature === '' ? null : Number(filters.maxTemperature);
+  const minHumidity = filters.minHumidity === '' ? null : Number(filters.minHumidity);
+  const maxHumidity = filters.maxHumidity === '' ? null : Number(filters.maxHumidity);
 
-  useEffect(() => {
-    if (ride.route.length < 2) {
-      return;
+  return records.filter((record) => {
+    const timestamp = Date.parse(record.device_timestamp);
+
+    if (filters.trashStatus === 'detected' && !record.trash_detected) {
+      return false;
     }
 
-    const bounds = L.latLngBounds(ride.route.map((point) => [point.lat, point.lon]));
-    map.fitBounds(bounds, { padding: [34, 34] });
-  }, [map, ride]);
+    if (filters.trashStatus === 'clear' && record.trash_detected) {
+      return false;
+    }
 
-  return null;
+    if (filters.toxicityLevel !== 'all' && record.toxicity_level !== filters.toxicityLevel) {
+      return false;
+    }
+
+    if (start !== null && timestamp < start) {
+      return false;
+    }
+
+    if (end !== null && timestamp > end) {
+      return false;
+    }
+
+    if (minTemperature !== null && Number.isFinite(minTemperature) && record.temperature < minTemperature) {
+      return false;
+    }
+
+    if (maxTemperature !== null && Number.isFinite(maxTemperature) && record.temperature > maxTemperature) {
+      return false;
+    }
+
+    if (minHumidity !== null && Number.isFinite(minHumidity) && record.humidity < minHumidity) {
+      return false;
+    }
+
+    if (maxHumidity !== null && Number.isFinite(maxHumidity) && record.humidity > maxHumidity) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
-function EventTimeline({
-  ride,
-  events,
-  layers,
-  selectedEventId,
-  onSelectEvent
+function getSummaryMetrics(records: CityScanRecord[]): SummaryMetric[] {
+  const detected = records.filter((record) => record.trash_detected).length;
+  const high = records.filter((record) => record.toxicity_level === 'High').length;
+  const medium = records.filter((record) => record.toxicity_level === 'Medium').length;
+  const averageTemperature = average(records.map((record) => record.temperature));
+  const averageHumidity = average(records.map((record) => record.humidity));
+
+  return [
+    { label: 'Total records', value: String(records.length), detail: 'visible scan points' },
+    { label: 'Trash detected', value: String(detected), detail: `${records.length - detected} clear scans` },
+    { label: 'High toxicity', value: String(high), detail: 'red intervention queue' },
+    { label: 'Medium toxicity', value: String(medium), detail: 'yellow review queue' },
+    {
+      label: 'Avg temperature',
+      value: records.length ? `${averageTemperature.toFixed(1)} C` : '0.0 C',
+      detail: 'Modulino reading'
+    },
+    {
+      label: 'Avg humidity',
+      value: records.length ? `${averageHumidity.toFixed(0)}%` : '0%',
+      detail: 'Modulino reading'
+    }
+  ];
+}
+
+function ModeToggle({
+  mode,
+  onModeChange
 }: {
-  ride: Ride;
-  events: RideEvent[];
-  layers: LayerState;
-  selectedEventId: string | null;
-  onSelectEvent: (eventId: string) => void;
+  mode: DataMode;
+  onModeChange: (mode: DataMode) => void;
 }) {
   return (
-    <section className="event-timeline" aria-label="Ride event timeline">
-      <div className="timeline-header">
-        <div>
-          <span>Ride timeline</span>
-          <h2>Events by time</h2>
-        </div>
-        <strong>{events.length} events</strong>
-      </div>
-      <div className="timeline-track" role="list">
-        <span className="timeline-line" aria-hidden="true" />
-        {events.map((event) => {
-          const visible = visibleForLayers(event, layers);
-          const selected = selectedEventId === event.id;
-
-          return (
-            <button
-              key={event.id}
-              className={`timeline-event${selected ? ' selected' : ''}${visible ? '' : ' muted'}`}
-              style={{ '--event-color': markerColor(event, layers), left: `${getTimelinePosition(event, ride)}%` } as React.CSSProperties}
-              type="button"
-              title={`${formatTime(event.timestamp)} - ${formatLabel(event.aiLabel)}`}
-              aria-label={`Select ${formatLabel(event.aiLabel)} at ${formatTime(event.timestamp)}`}
-              onClick={() => onSelectEvent(event.id)}
-            />
-          );
-        })}
-      </div>
-      <div className="timeline-times">
-        <span>{formatTime(ride.startedAt)}</span>
-        <span>{formatTime(ride.endedAt)}</span>
-      </div>
-    </section>
-  );
-}
-
-function EventList({
-  events,
-  layers,
-  selectedEventId,
-  onSelectEvent
-}: {
-  events: RideEvent[];
-  layers: LayerState;
-  selectedEventId: string | null;
-  onSelectEvent: (eventId: string) => void;
-}) {
-  return (
-    <section className="event-list-panel">
-      <div className="section-heading">
-        <div>
-          <span>Review queue</span>
-          <h2>Ride events</h2>
-        </div>
-        <ListChecks size={22} />
-      </div>
-      <div className="event-list" role="list">
-        {events.map((event) => {
-          const visible = visibleForLayers(event, layers);
-          const selected = selectedEventId === event.id;
-
-          return (
-            <button
-              key={event.id}
-              className={`event-row${selected ? ' selected' : ''}${visible ? '' : ' muted'}`}
-              type="button"
-              onClick={() => onSelectEvent(event.id)}
-            >
-              <span className="event-row-marker" style={{ '--event-color': markerColor(event, layers) } as React.CSSProperties} />
-              <span className="event-row-main">
-                <span className="event-row-meta">
-                  <strong>{formatTime(event.timestamp)}</strong>
-                  <em className={isAnomaly(event) ? 'event-type anomaly' : 'event-type'}>{event.eventType}</em>
-                </span>
-                <span className="event-row-label">{formatLabel(event.aiLabel)}</span>
-                <span className="event-row-stats">
-                  <span>{event.temperature.toFixed(1)} C</span>
-                  <span>{Math.round(event.light)} lx</span>
-                  <span>{Math.round(event.confidence * 100)}%</span>
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  detail
-}: {
-  icon: typeof Bike;
-  label: string;
-  value: string;
-  detail: string;
-}) {
-  return (
-    <article className="metric-card">
-      <div className="metric-icon" aria-hidden="true">
-        <Icon size={19} />
-      </div>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-        <small>{detail}</small>
-      </div>
-    </article>
-  );
-}
-
-function LayerToggle({
-  id,
-  checked,
-  label,
-  accent,
-  onChange
-}: {
-  id: keyof LayerState;
-  checked: boolean;
-  label: string;
-  accent: string;
-  onChange: (layer: keyof LayerState) => void;
-}) {
-  return (
-    <label className="layer-toggle" style={{ '--layer-accent': accent } as React.CSSProperties}>
-      <input type="checkbox" checked={checked} onChange={() => onChange(id)} />
-      <span className="toggle-swatch" aria-hidden="true" />
-      <span>{label}</span>
-    </label>
-  );
-}
-
-function Legend({ layers }: { layers: LayerState }) {
-  return (
-    <div className="legend">
-      <div className="legend-title">
-        <Layers size={16} />
-        Legend
-      </div>
-      {layers.temperature ? (
-        <div className="legend-row">
-          <span className="legend-gradient temperature" />
-          <span>Temperature: cool to heat</span>
-        </div>
-      ) : null}
-      {layers.light ? (
-        <div className="legend-row">
-          <span className="legend-gradient light" />
-          <span>Light: low to high exposure</span>
-        </div>
-      ) : null}
-      {layers.labels ? (
-        <div className="legend-row">
-          <span className="legend-dot blue" />
-          <span>AI label clusters</span>
-        </div>
-      ) : null}
-      {layers.anomalies ? (
-        <div className="legend-row">
-          <span className="legend-dot red" />
-          <span>Anomaly events</span>
-        </div>
-      ) : null}
+    <div className="mode-toggle" aria-label="Data source">
+      <button className={mode === 'real' ? 'active' : ''} type="button" onClick={() => onModeChange('real')}>
+        Real Data
+      </button>
+      <button className={mode === 'fake' ? 'active' : ''} type="button" onClick={() => onModeChange('fake')}>
+        Fake Test Data
+      </button>
     </div>
   );
 }
 
-function EventDetails({ event }: { event: RideEvent | null }) {
-  if (!event) {
+function TopBar({
+  mode,
+  isLoading,
+  lastUpdated,
+  onModeChange,
+  onRefresh
+}: {
+  mode: DataMode;
+  isLoading: boolean;
+  lastUpdated: Date | null;
+  onModeChange: (mode: DataMode) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <header className="top-bar">
+      <div className="brand-block">
+        <span className="eyebrow">Barcelona city agencies</span>
+        <h1>EcoDragon</h1>
+        <p>Trash detection records with bike-mounted environmental context.</p>
+      </div>
+      <div className="top-actions">
+        <ModeToggle mode={mode} onModeChange={onModeChange} />
+        <button className="refresh-button" type="button" onClick={onRefresh} disabled={isLoading}>
+          <RefreshCw size={16} />
+          {mode === 'fake' ? 'Regenerate' : 'Refresh'}
+        </button>
+        <span className="updated-at">{lastUpdated ? `Updated ${formatShortTime(lastUpdated.toISOString())}` : 'Not loaded'}</span>
+      </div>
+    </header>
+  );
+}
+
+function SummaryCards({ records }: { records: CityScanRecord[] }) {
+  const metrics = getSummaryMetrics(records);
+  const icons: LucideIcon[] = [Database, Trash2, Flame, AlertCircle, Thermometer, Droplets];
+
+  return (
+    <section className="summary-grid" aria-label="Scan summary">
+      {metrics.map((metric, index) => {
+        const Icon = icons[index];
+
+        return (
+          <article className="summary-card" key={metric.label}>
+            <div className="summary-icon" aria-hidden="true">
+              <Icon size={18} />
+            </div>
+            <div>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.detail}</small>
+            </div>
+          </article>
+        );
+      })}
+    </section>
+  );
+}
+
+function FiltersPanel({
+  filters,
+  onChange,
+  onReset
+}: {
+  filters: ScanFilters;
+  onChange: (filters: Partial<ScanFilters>) => void;
+  onReset: () => void;
+}) {
+  return (
+    <section className="panel filters-panel">
+      <div className="section-heading">
+        <div>
+          <span>Controls</span>
+          <h2>Filters</h2>
+        </div>
+        <Filter size={20} />
+      </div>
+
+      <div className="filter-grid">
+        <label>
+          <span>Trash detected</span>
+          <select
+            value={filters.trashStatus}
+            onChange={(event) => onChange({ trashStatus: event.currentTarget.value as TrashStatusFilter })}
+          >
+            <option value="all">All scans</option>
+            <option value="detected">Detected</option>
+            <option value="clear">Not detected</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Toxicity level</span>
+          <select
+            value={filters.toxicityLevel}
+            onChange={(event) => onChange({ toxicityLevel: event.currentTarget.value as ToxicityLevelFilter })}
+          >
+            <option value="all">All toxicity levels</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+          </select>
+        </label>
+
+        <label>
+          <span>From timestamp</span>
+          <input
+            type="datetime-local"
+            value={filters.startTimestamp}
+            onChange={(event) => onChange({ startTimestamp: event.currentTarget.value })}
+          />
+        </label>
+
+        <label>
+          <span>To timestamp</span>
+          <input
+            type="datetime-local"
+            value={filters.endTimestamp}
+            onChange={(event) => onChange({ endTimestamp: event.currentTarget.value })}
+          />
+        </label>
+
+        <div className="range-row">
+          <label>
+            <span>Min temp</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={filters.minTemperature}
+              onChange={(event) => onChange({ minTemperature: event.currentTarget.value })}
+              placeholder="C"
+            />
+          </label>
+          <label>
+            <span>Max temp</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={filters.maxTemperature}
+              onChange={(event) => onChange({ maxTemperature: event.currentTarget.value })}
+              placeholder="C"
+            />
+          </label>
+        </div>
+
+        <div className="range-row">
+          <label>
+            <span>Min humidity</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="1"
+              value={filters.minHumidity}
+              onChange={(event) => onChange({ minHumidity: event.currentTarget.value })}
+              placeholder="%"
+            />
+          </label>
+          <label>
+            <span>Max humidity</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="1"
+              value={filters.maxHumidity}
+              onChange={(event) => onChange({ maxHumidity: event.currentTarget.value })}
+              placeholder="%"
+            />
+          </label>
+        </div>
+      </div>
+
+      <button className="secondary-button" type="button" onClick={onReset}>
+        Reset filters
+      </button>
+    </section>
+  );
+}
+
+function MapBounds({ records }: { records: CityScanRecord[] }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (records.length === 0) {
+      map.setView(barcelonaCenter, 13);
+      return;
+    }
+
+    if (records.length === 1) {
+      map.setView([records[0].latitude, records[0].longitude], 15);
+      return;
+    }
+
+    const bounds = L.latLngBounds(records.map((record) => [record.latitude, record.longitude]));
+    map.fitBounds(bounds, { padding: [32, 32], maxZoom: 15 });
+  }, [map, records]);
+
+  return null;
+}
+
+function SelectedRecordFocus({ record }: { record: CityScanRecord | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!record) {
+      return;
+    }
+
+    map.setView([record.latitude, record.longitude], Math.max(map.getZoom(), 15));
+  }, [map, record]);
+
+  return null;
+}
+
+function ToxicityLevelBadge({ toxicityLevel }: { toxicityLevel: ToxicityLevel }) {
+  return <span className={`toxicity-badge ${toxicityLevel.toLowerCase()}`}>{toxicityLevel}</span>;
+}
+
+function DetectionBadge({ detected }: { detected: boolean }) {
+  return (
+    <span className={`detection-badge ${detected ? 'detected' : 'clear'}`}>
+      {detected ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+      {detected ? 'Detected' : 'Clear'}
+    </span>
+  );
+}
+
+function ScanMarker({
+  record,
+  selected,
+  openPopup,
+  onSelect
+}: {
+  record: CityScanRecord;
+  selected: boolean;
+  openPopup: boolean;
+  onSelect: (recordId: string) => void;
+}) {
+  const markerRef = useRef<L.Marker | null>(null);
+
+  useEffect(() => {
+    if (openPopup) {
+      markerRef.current?.openPopup();
+    }
+  }, [openPopup]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={[record.latitude, record.longitude]}
+      icon={createMarkerIcon(record, selected)}
+      eventHandlers={{
+        click: () => onSelect(record.id)
+      }}
+    >
+      <Tooltip direction="top" offset={[0, -12]}>
+        {record.toxicity_level} toxicity level
+      </Tooltip>
+      <Popup>
+        <div className="marker-popup">
+          <strong>{record.id}</strong>
+          <span>{formatTimestamp(record.device_timestamp)}</span>
+          <span>{record.toxicity_level} toxicity trash</span>
+          <span>
+            {record.temperature.toFixed(1)} C / {record.humidity.toFixed(0)}%
+          </span>
+        </div>
+      </Popup>
+    </Marker>
+  );
+}
+
+function MapLegend() {
+  return (
+    <div className="legend">
+      <div className="legend-title">Legend</div>
+      <div className="legend-row">
+        <span className="legend-dot high" />
+        High toxicity
+      </div>
+      <div className="legend-row">
+        <span className="legend-dot medium" />
+        Medium toxicity
+      </div>
+    </div>
+  );
+}
+
+function TrashMap({
+  records,
+  selectedRecord,
+  focusedRecord,
+  onSelectRecord
+}: {
+  records: CityScanRecord[];
+  selectedRecord: CityScanRecord | null;
+  focusedRecord: CityScanRecord | null;
+  onSelectRecord: (recordId: string) => void;
+}) {
+  const markerRecords = records.filter((record) => record.trash_detected);
+
+  return (
+    <section className="map-panel">
+      <div className="section-heading map-heading">
+        <div>
+          <span>Map view</span>
+          <h2>Barcelona scan points</h2>
+        </div>
+        <MapPinned size={20} />
+      </div>
+      <div className="map-stage">
+        <MapContainer center={barcelonaCenter} zoom={13} scrollWheelZoom className="scan-map">
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <MapBounds records={markerRecords} />
+          <SelectedRecordFocus record={focusedRecord} />
+          {markerRecords.map((record) => (
+            <ScanMarker
+              key={record.id}
+              record={record}
+              selected={selectedRecord?.id === record.id}
+              openPopup={focusedRecord?.id === record.id}
+              onSelect={onSelectRecord}
+            />
+          ))}
+        </MapContainer>
+        <MapLegend />
+      </div>
+    </section>
+  );
+}
+
+function DetailsPanel({ record }: { record: CityScanRecord | null }) {
+  if (!record) {
     return (
-      <section className="details empty-state">
-        <MapPinned size={22} />
-        <h2>Event details</h2>
-        <p>Select a map marker to inspect the sensor packet and local AI output.</p>
+      <section className="panel details-panel empty-panel">
+        <LocateFixed size={22} />
+        <h2>No scan selected</h2>
       </section>
     );
   }
 
   return (
-    <section className="details">
+    <section className="panel details-panel">
       <div className="section-heading">
         <div>
-          <span>Selected event</span>
-          <h2>{formatLabel(event.aiLabel)}</h2>
+          <span>Selected scan</span>
+          <h2>{record.id}</h2>
         </div>
-        <strong className={isAnomaly(event) ? 'status-pill anomaly' : 'status-pill'}>{event.eventType}</strong>
+        <DetectionBadge detected={record.trash_detected} />
       </div>
 
       <dl className="detail-grid">
         <div>
-          <dt>Time</dt>
-          <dd>{formatTime(event.timestamp)}</dd>
+          <dt>Latitude</dt>
+          <dd>{record.latitude.toFixed(6)}</dd>
         </div>
         <div>
-          <dt>Confidence</dt>
-          <dd>{Math.round(event.confidence * 100)}%</dd>
+          <dt>Longitude</dt>
+          <dd>{record.longitude.toFixed(6)}</dd>
         </div>
         <div>
           <dt>Temperature</dt>
-          <dd>{event.temperature.toFixed(1)} C</dd>
-        </div>
-        <div>
-          <dt>Light</dt>
-          <dd>{Math.round(event.light)} lx</dd>
+          <dd>{record.temperature.toFixed(1)} C</dd>
         </div>
         <div>
           <dt>Humidity</dt>
-          <dd>{event.humidity === undefined ? 'n/a' : `${Math.round(event.humidity)}%`}</dd>
+          <dd>{record.humidity.toFixed(0)}%</dd>
         </div>
         <div>
-          <dt>Coordinates</dt>
+          <dt>Trash detected</dt>
+          <dd>{record.trash_detected ? 'true' : 'false'}</dd>
+        </div>
+        <div>
+          <dt>Toxicity level</dt>
           <dd>
-            {event.lat.toFixed(5)}, {event.lon.toFixed(5)}
+            <ToxicityLevelBadge toxicityLevel={record.toxicity_level} />
           </dd>
+        </div>
+        <div className="full-width">
+          <dt>Device timestamp</dt>
+          <dd>{formatTimestamp(record.device_timestamp)}</dd>
         </div>
       </dl>
     </section>
   );
 }
 
-function UploadPanel({
-  onReset,
-  onUploaded
+function RecordsTable({
+  records,
+  selectedRecordId,
+  onSelectRecord
 }: {
-  onReset: () => Promise<void>;
-  onUploaded: (ride: Ride) => void;
+  records: CityScanRecord[];
+  selectedRecordId: string | null;
+  onSelectRecord: (recordId: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-
-  async function handleUpload() {
-    setMessage(null);
-    setIsUploading(true);
-
-    try {
-      const parsed = JSON.parse(draft);
-      const ride = await uploadRide(parsed);
-      onUploaded(ride);
-      setMessage(`Uploaded ${ride.id}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Upload failed');
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  async function handleFile(file: File | null) {
-    if (!file) {
-      return;
-    }
-
-    setDraft(await file.text());
-    setMessage(`Loaded ${file.name}`);
-  }
-
-  async function handleReset() {
-    setMessage(null);
-    setIsResetting(true);
-
-    try {
-      await onReset();
-      setDraft('');
-      setMessage('Demo data reset to the seeded ride');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Reset failed');
-    } finally {
-      setIsResetting(false);
+  function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>, recordId: string) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelectRecord(recordId);
     }
   }
 
   return (
-    <section className="upload-panel">
+    <section className="table-panel">
       <div className="section-heading">
         <div>
-          <span>Ride upload</span>
-          <h2>JSON ingest</h2>
+          <span>Table view</span>
+          <h2>Records</h2>
         </div>
-        <FileJson size={22} />
+        <Table2 size={20} />
       </div>
-      <label className="file-input">
-        <input type="file" accept="application/json,.json" onChange={(event) => handleFile(event.target.files?.[0] ?? null)} />
-        <Upload size={16} />
-        Select JSON
-      </label>
-      <textarea
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder='{"id":"ride-id","bikeId":"bicing-edge-node-14", ...}'
-        spellCheck={false}
-      />
-      <button className="primary-button" type="button" onClick={handleUpload} disabled={isUploading || draft.trim().length === 0}>
-        {isUploading ? 'Uploading...' : 'Upload ride'}
-      </button>
-      <button className="secondary-button" type="button" onClick={handleReset} disabled={isResetting}>
-        <RotateCcw size={16} />
-        {isResetting ? 'Resetting...' : 'Reset demo data'}
-      </button>
-      {message ? <p className="upload-message">{message}</p> : null}
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Timestamp</th>
+              <th>Trash</th>
+              <th>Toxicity</th>
+              <th>Temp</th>
+              <th>Humidity</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="empty-table-cell">
+                  No records match the current filters.
+                </td>
+              </tr>
+            ) : (
+              records.map((record) => (
+                <tr
+                  key={record.id}
+                  className={`${selectedRecordId === record.id ? 'selected' : ''} ${record.trash_detected ? 'has-trash' : ''} ${
+                    record.toxicity_level === 'High' ? 'high-toxicity' : ''
+                  }`}
+                  tabIndex={0}
+                  onClick={() => onSelectRecord(record.id)}
+                  onKeyDown={(event) => handleKeyDown(event, record.id)}
+                >
+                  <td>{record.id}</td>
+                  <td>{formatTimestamp(record.device_timestamp)}</td>
+                  <td>
+                    <DetectionBadge detected={record.trash_detected} />
+                  </td>
+                  <td>
+                    <ToxicityLevelBadge toxicityLevel={record.toxicity_level} />
+                  </td>
+                  <td>{record.temperature.toFixed(1)} C</td>
+                  <td>{record.humidity.toFixed(0)}%</td>
+                  <td>{record.latitude.toFixed(5)}</td>
+                  <td>{record.longitude.toFixed(5)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
 
 function App() {
-  const [rides, setRides] = useState<Ride[]>([]);
-  const [selectedRideId, setSelectedRideId] = useState('');
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [layers, setLayers] = useState<LayerState>(defaultLayers);
+  const [mode, setMode] = useState<DataMode>('fake');
+  const [records, setRecords] = useState<CityScanRecord[]>([]);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [focusedRecordId, setFocusedRecordId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ScanFilters>(defaultFilters);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  async function loadRecords(nextMode: DataMode) {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextRecords = nextMode === 'fake' ? generateFakeCityScans() : await fetchCityScans();
+
+      setRecords(nextRecords);
+      setSelectedRecordId(nextRecords[0]?.id ?? null);
+      setFocusedRecordId(null);
+      setLastUpdated(new Date());
+    } catch (requestError) {
+      setRecords([]);
+      setSelectedRecordId(null);
+      setFocusedRecordId(null);
+      setError(requestError instanceof Error ? requestError.message : 'Unable to load scan records.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    let isMounted = true;
+    void loadRecords(mode);
+  }, [mode]);
 
-    fetchRides()
-      .then((nextRides) => {
-        if (!isMounted) {
-          return;
-        }
+  const filteredRecords = useMemo(() => filterRecords(records, filters), [records, filters]);
 
-        setRides(nextRides);
-        setSelectedRideId(nextRides[0]?.id ?? '');
-        setSelectedEventId(nextRides[0]?.events[0]?.id ?? null);
-        setError(null);
-      })
-      .catch((requestError) => {
-        if (isMounted) {
-          setError(requestError instanceof Error ? requestError.message : 'Unable to fetch rides');
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const ride = rides.find((candidate) => candidate.id === selectedRideId) ?? rides[0] ?? null;
-
-  const selectedEvent = useMemo(() => {
-    if (!ride) {
-      return null;
+  useEffect(() => {
+    if (filteredRecords.length === 0 && selectedRecordId !== null) {
+      setSelectedRecordId(null);
+      return;
     }
 
-    return ride.events.find((event) => event.id === selectedEventId) ?? ride.events[0] ?? null;
-  }, [ride, selectedEventId]);
-
-  const visibleEvents = useMemo(() => {
-    if (!ride) {
-      return [];
+    if (filteredRecords.length > 0 && !filteredRecords.some((record) => record.id === selectedRecordId)) {
+      setSelectedRecordId(filteredRecords[0].id);
     }
+  }, [filteredRecords, selectedRecordId]);
 
-    return ride.events.filter((event) => visibleForLayers(event, layers));
-  }, [layers, ride]);
+  const selectedRecord = filteredRecords.find((record) => record.id === selectedRecordId) ?? null;
+  const focusedRecord = filteredRecords.find((record) => record.id === focusedRecordId) ?? null;
 
-  const chronologicalEvents = useMemo(() => {
-    if (!ride) {
-      return [];
-    }
-
-    return [...ride.events].sort((first, second) => Date.parse(first.timestamp) - Date.parse(second.timestamp));
-  }, [ride]);
-
-  const metrics = useMemo(() => {
-    if (!ride) {
-      return null;
-    }
-
-    return {
-      distanceKm: getDistanceKm(ride.route),
-      durationMinutes: getRideMinutes(ride),
-      averageTemperature: average(ride.events.map((event) => event.temperature)),
-      averageLight: average(ride.events.map((event) => event.light)),
-      anomalies: ride.events.filter(isAnomaly).length
-    };
-  }, [ride]);
-
-  function toggleLayer(layer: keyof LayerState) {
-    setLayers((current) => ({
+  function handleFilterChange(nextFilters: Partial<ScanFilters>) {
+    setFilters((current) => ({
       ...current,
-      [layer]: !current[layer]
+      ...nextFilters
     }));
   }
 
-  function handleRideUploaded(uploadedRide: Ride) {
-    setRides((current) => {
-      const withoutUploaded = current.filter((candidate) => candidate.id !== uploadedRide.id);
-      return [uploadedRide, ...withoutUploaded];
-    });
-    setSelectedRideId(uploadedRide.id);
-    setSelectedEventId(uploadedRide.events[0]?.id ?? null);
+  function handleSelectRecord(recordId: string) {
+    setSelectedRecordId(recordId);
+    setFocusedRecordId(recordId);
   }
-
-  async function handleDemoReset() {
-    const resetRides = await resetDemoRides();
-    setRides(resetRides);
-    setSelectedRideId(resetRides[0]?.id ?? '');
-    setSelectedEventId(resetRides[0]?.events[0]?.id ?? null);
-  }
-
-  function handleRideChange(rideId: string) {
-    const nextRide = rides.find((candidate) => candidate.id === rideId);
-    setSelectedRideId(rideId);
-    setSelectedEventId(nextRide?.events[0]?.id ?? null);
-  }
-
-  if (isLoading) {
-    return (
-      <main className="app-shell loading-state">
-        <Satellite size={26} />
-        <p>Loading Barcelona sensing data...</p>
-      </main>
-    );
-  }
-
-  if (error || !ride || !metrics) {
-    return (
-      <main className="app-shell loading-state">
-        <AlertTriangle size={28} />
-        <p>{error ?? 'No ride data available'}</p>
-      </main>
-    );
-  }
-
-  const routePositions = ride.route.map((point) => [point.lat, point.lon] as [number, number]);
 
   return (
     <main className="app-shell">
-      <header className="top-bar">
-        <div>
-          <span className="eyebrow">Barcelona agencies</span>
-          <h1>Bike Sensing Platform</h1>
-        </div>
-        <div className="ride-selector">
-          <label htmlFor="ride-select">Ride</label>
-          <select id="ride-select" value={ride.id} onChange={(event) => handleRideChange(event.target.value)}>
-            {rides.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.id}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
+      <TopBar
+        mode={mode}
+        isLoading={isLoading}
+        lastUpdated={lastUpdated}
+        onModeChange={setMode}
+        onRefresh={() => void loadRecords(mode)}
+      />
 
-      <section className="story-strip">
-        <div>
-          <Bike size={18} />
-          Arduino UNO Q
-        </div>
-        <div>
-          <Satellite size={18} />
-          Phone GPS + Bluetooth
-        </div>
-        <div>
-          <Gauge size={18} />
-          Edge AI event stream
-        </div>
-        <div>
-          <Upload size={18} />
-          Post-ride upload
-        </div>
-      </section>
+      {error ? (
+        <section className="state-banner error-state">
+          <AlertCircle size={18} />
+          <span>{error}</span>
+        </section>
+      ) : null}
 
-      <section className="metrics-grid" aria-label="Ride summary">
-        <MetricCard icon={Clock3} label="Duration" value={`${metrics.durationMinutes} min`} detail={ride.bikeId} />
-        <MetricCard icon={RouteIcon} label="Distance" value={`${metrics.distanceKm.toFixed(2)} km`} detail={`${ride.route.length} GPS points`} />
-        <MetricCard icon={MapPinned} label="Events" value={`${ride.events.length}`} detail={`${visibleEvents.length} visible`} />
-        <MetricCard icon={Thermometer} label="Temperature" value={`${metrics.averageTemperature.toFixed(1)} C`} detail="event average" />
-        <MetricCard icon={Lightbulb} label="Light" value={`${Math.round(metrics.averageLight)} lx`} detail="event average" />
-        <MetricCard icon={AlertTriangle} label="Anomalies" value={`${metrics.anomalies}`} detail="flagged by AI/type" />
-        <MetricCard icon={RadioTower} label="Sensor cadence" value="0.33333 Hz" detail="1 sample / 3 sec" />
-      </section>
+      {isLoading ? (
+        <section className="state-banner loading-state">
+          <RefreshCw size={18} />
+          <span>{mode === 'fake' ? 'Generating fake test data...' : 'Fetching Supabase city_scans records...'}</span>
+        </section>
+      ) : null}
+
+      {!isLoading && !error && records.length === 0 ? (
+        <section className="state-banner empty-state">
+          <Database size={18} />
+          <span>No records returned.</span>
+        </section>
+      ) : null}
+
+      <SummaryCards records={filteredRecords} />
 
       <section className="dashboard-grid">
-        <div className="map-panel">
-          <div className="map-toolbar">
-            <div className="layer-list" aria-label="Map layers">
-              <LayerToggle id="temperature" label="Temperature" accent="#ea580c" checked={layers.temperature} onChange={toggleLayer} />
-              <LayerToggle id="light" label="Light" accent="#f59e0b" checked={layers.light} onChange={toggleLayer} />
-              <LayerToggle id="labels" label="AI labels" accent="#2563eb" checked={layers.labels} onChange={toggleLayer} />
-              <LayerToggle id="anomalies" label="Anomalies" accent="#dc2626" checked={layers.anomalies} onChange={toggleLayer} />
-            </div>
-          </div>
-
-          <div className="map-stage">
-            <MapContainer center={[41.395, 2.172]} zoom={14} scrollWheelZoom className="ride-map">
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              <MapBounds ride={ride} />
-              <Polyline positions={routePositions} pathOptions={{ color: '#111827', weight: 5, opacity: 0.78 }} />
-              <Polyline positions={routePositions} pathOptions={{ color: '#22c55e', weight: 2, opacity: 0.95 }} />
-              {visibleEvents.map((event) => {
-                const color = markerColor(event, layers);
-                const selected = selectedEvent?.id === event.id;
-
-                return (
-                  <Marker
-                    key={event.id}
-                    position={[event.lat, event.lon]}
-                    icon={createEventIcon(color, selected)}
-                    eventHandlers={{
-                      click: () => setSelectedEventId(event.id)
-                    }}
-                  >
-                    <Tooltip direction="top" offset={[0, -10]}>
-                      {formatLabel(event.aiLabel)}
-                    </Tooltip>
-                    <Popup>
-                      <strong>{formatLabel(event.aiLabel)}</strong>
-                      <br />
-                      {event.temperature.toFixed(1)} C · {Math.round(event.light)} lx
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
-            <Legend layers={layers} />
-          </div>
-          <EventTimeline
-            ride={ride}
-            events={chronologicalEvents}
-            layers={layers}
-            selectedEventId={selectedEvent?.id ?? null}
-            onSelectEvent={setSelectedEventId}
-          />
-        </div>
-
-        <aside className="side-panel">
-          <section className="ride-card">
-            <div className="section-heading">
-              <div>
-                <span>Current ride</span>
-                <h2>{ride.id}</h2>
-              </div>
-              <Bike size={22} />
-            </div>
-            <p>{ride.agencyNotes}</p>
-            <div className="ride-times">
-              <span>{formatTime(ride.startedAt)}</span>
-              <span>{formatTime(ride.endedAt)}</span>
-            </div>
-          </section>
-          <EventDetails event={selectedEvent} />
-          <EventList events={chronologicalEvents} layers={layers} selectedEventId={selectedEvent?.id ?? null} onSelectEvent={setSelectedEventId} />
-          <UploadPanel onReset={handleDemoReset} onUploaded={handleRideUploaded} />
+        <aside className="left-rail">
+          <FiltersPanel filters={filters} onChange={handleFilterChange} onReset={() => setFilters(defaultFilters)} />
+          <DetailsPanel record={selectedRecord} />
         </aside>
+
+        <div className="workspace">
+          <TrashMap
+            records={filteredRecords}
+            selectedRecord={selectedRecord}
+            focusedRecord={focusedRecord}
+            onSelectRecord={handleSelectRecord}
+          />
+          <RecordsTable records={filteredRecords} selectedRecordId={selectedRecordId} onSelectRecord={handleSelectRecord} />
+        </div>
       </section>
     </main>
   );
