@@ -1,10 +1,10 @@
 # EcoDragon
-<img width="1254" height="1254" alt="image" src="https://github.com/user-attachments/assets/f17d4826-4971-4bd7-bbf8-4126cf288993" />
 
 EcoDragon is a HackUPC dashboard for Barcelona city agencies. The app visualizes bike-mounted trash scan records from Supabase, with environmental readings from Modulino sensors and phone-provided GPS coordinates.
 
 The UI does not run inference, compute `toxicity_level`, upload rides, or write records. It only reads `city_scans` rows and supports generated fake test data for demos.
 
+<img width="627" height="627" alt="image" src="https://github.com/user-attachments/assets/f17d4826-4971-4bd7-bbf8-4126cf288993" />
 ## Stack
 
 - React
