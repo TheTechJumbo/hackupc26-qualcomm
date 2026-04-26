@@ -1,1 +1,23 @@
-.env.local
+# These are all mounted as volumes at runtime — no need to bake them into the image
+data/
+models/
+logs/
+vision_runs/
+
+# Git history and editor state add noise and size
+.git/
+.claude/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+
+# Virtual environments (if any exist locally)
+venv/
+.venv/
+env/
+.claude/
