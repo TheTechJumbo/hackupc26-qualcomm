@@ -1,0 +1,227 @@
+[
+  {
+    "id": "ride-barcelona-eixample-001",
+    "bikeId": "bicing-edge-node-14",
+    "startedAt": "2026-04-25T08:12:00+02:00",
+    "endedAt": "2026-04-25T08:31:00+02:00",
+    "agencyNotes": "Morning sensing loop from Placa de Catalunya through Eixample toward Sagrada Familia.",
+    "route": [
+      {
+        "lat": 41.38742,
+        "lon": 2.1686,
+        "timestamp": "2026-04-25T08:12:00+02:00"
+      },
+      {
+        "lat": 41.38903,
+        "lon": 2.16777,
+        "timestamp": "2026-04-25T08:13:20+02:00"
+      },
+      {
+        "lat": 41.39102,
+        "lon": 2.16683,
+        "timestamp": "2026-04-25T08:14:45+02:00"
+      },
+      {
+        "lat": 41.39308,
+        "lon": 2.16603,
+        "timestamp": "2026-04-25T08:16:15+02:00"
+      },
+      {
+        "lat": 41.39516,
+        "lon": 2.16648,
+        "timestamp": "2026-04-25T08:17:40+02:00"
+      },
+      {
+        "lat": 41.39704,
+        "lon": 2.16762,
+        "timestamp": "2026-04-25T08:19:00+02:00"
+      },
+      {
+        "lat": 41.39876,
+        "lon": 2.16904,
+        "timestamp": "2026-04-25T08:20:25+02:00"
+      },
+      {
+        "lat": 41.40052,
+        "lon": 2.1711,
+        "timestamp": "2026-04-25T08:21:55+02:00"
+      },
+      {
+        "lat": 41.40151,
+        "lon": 2.17328,
+        "timestamp": "2026-04-25T08:23:35+02:00"
+      },
+      {
+        "lat": 41.40219,
+        "lon": 2.17554,
+        "timestamp": "2026-04-25T08:25:00+02:00"
+      },
+      {
+        "lat": 41.40232,
+        "lon": 2.17768,
+        "timestamp": "2026-04-25T08:26:40+02:00"
+      },
+      {
+        "lat": 41.40176,
+        "lon": 2.18008,
+        "timestamp": "2026-04-25T08:28:10+02:00"
+      },
+      {
+        "lat": 41.40106,
+        "lon": 2.18176,
+        "timestamp": "2026-04-25T08:29:35+02:00"
+      },
+      {
+        "lat": 41.40356,
+        "lon": 2.17438,
+        "timestamp": "2026-04-25T08:31:00+02:00"
+      }
+    ],
+    "events": [
+      {
+        "id": "evt-001",
+        "lat": 41.38742,
+        "lon": 2.1686,
+        "timestamp": "2026-04-25T08:12:20+02:00",
+        "light": 610,
+        "temperature": 20.9,
+        "humidity": 58,
+        "aiLabel": "baseline_traffic_flow",
+        "confidence": 0.93,
+        "eventType": "mobility"
+      },
+      {
+        "id": "evt-002",
+        "lat": 41.38903,
+        "lon": 2.16777,
+        "timestamp": "2026-04-25T08:13:35+02:00",
+        "light": 475,
+        "temperature": 20.4,
+        "humidity": 60,
+        "aiLabel": "tree_shade_corridor",
+        "confidence": 0.88,
+        "eventType": "microclimate"
+      },
+      {
+        "id": "evt-003",
+        "lat": 41.39102,
+        "lon": 2.16683,
+        "timestamp": "2026-04-25T08:15:00+02:00",
+        "light": 790,
+        "temperature": 22.1,
+        "humidity": 54,
+        "aiLabel": "high_sun_exposure",
+        "confidence": 0.91,
+        "eventType": "lighting"
+      },
+      {
+        "id": "evt-004",
+        "lat": 41.39308,
+        "lon": 2.16603,
+        "timestamp": "2026-04-25T08:16:30+02:00",
+        "light": 825,
+        "temperature": 23.4,
+        "humidity": 51,
+        "aiLabel": "heat_pocket",
+        "confidence": 0.86,
+        "eventType": "microclimate"
+      },
+      {
+        "id": "evt-005",
+        "lat": 41.39516,
+        "lon": 2.16648,
+        "timestamp": "2026-04-25T08:17:55+02:00",
+        "light": 520,
+        "temperature": 21.8,
+        "humidity": 57,
+        "aiLabel": "protected_bike_lane",
+        "confidence": 0.84,
+        "eventType": "mobility"
+      },
+      {
+        "id": "evt-006",
+        "lat": 41.39704,
+        "lon": 2.16762,
+        "timestamp": "2026-04-25T08:19:15+02:00",
+        "light": 340,
+        "temperature": 21.1,
+        "humidity": 61,
+        "aiLabel": "low_light_canyon",
+        "confidence": 0.89,
+        "eventType": "lighting"
+      },
+      {
+        "id": "evt-007",
+        "lat": 41.39876,
+        "lon": 2.16904,
+        "timestamp": "2026-04-25T08:20:45+02:00",
+        "light": 715,
+        "temperature": 22.8,
+        "humidity": 55,
+        "aiLabel": "dense_pedestrian_mix",
+        "confidence": 0.8,
+        "eventType": "mobility"
+      },
+      {
+        "id": "evt-008",
+        "lat": 41.40052,
+        "lon": 2.1711,
+        "timestamp": "2026-04-25T08:22:10+02:00",
+        "light": 680,
+        "temperature": 22.6,
+        "humidity": 56,
+        "aiLabel": "surface_anomaly",
+        "confidence": 0.94,
+        "eventType": "anomaly"
+      },
+      {
+        "id": "evt-009",
+        "lat": 41.40151,
+        "lon": 2.17328,
+        "timestamp": "2026-04-25T08:23:50+02:00",
+        "light": 755,
+        "temperature": 23.2,
+        "humidity": 53,
+        "aiLabel": "open_intersection",
+        "confidence": 0.87,
+        "eventType": "mobility"
+      },
+      {
+        "id": "evt-010",
+        "lat": 41.40219,
+        "lon": 2.17554,
+        "timestamp": "2026-04-25T08:25:20+02:00",
+        "light": 290,
+        "temperature": 21.6,
+        "humidity": 62,
+        "aiLabel": "low_visibility_segment",
+        "confidence": 0.9,
+        "eventType": "lighting"
+      },
+      {
+        "id": "evt-011",
+        "lat": 41.40232,
+        "lon": 2.17768,
+        "timestamp": "2026-04-25T08:26:55+02:00",
+        "light": 705,
+        "temperature": 24.1,
+        "humidity": 50,
+        "aiLabel": "thermal_anomaly",
+        "confidence": 0.82,
+        "eventType": "anomaly"
+      },
+      {
+        "id": "evt-012",
+        "lat": 41.40356,
+        "lon": 2.17438,
+        "timestamp": "2026-04-25T08:30:30+02:00",
+        "light": 650,
+        "temperature": 22.3,
+        "humidity": 56,
+        "aiLabel": "destination_cluster",
+        "confidence": 0.86,
+        "eventType": "mobility"
+      }
+    ]
+  }
+]
