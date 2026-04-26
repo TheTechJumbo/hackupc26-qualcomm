@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(py -3 -c \"print\\('hello'\\)\")",
+      "Bash(py *)",
+      "Bash(xargs cat *)",
+      "Read(//c/Users/kishp/**)",
+      "Read(///wsl.localhost/Ubuntu/home/kishan/HackUPC/**)",
+      "Read(///wsl.localhost/Ubuntu/home/kishan/**)",
+      "Read(///wsl.localhost/Ubuntu/home/**)",
+      "Bash(python3.11 -c ' *)",
+      "Bash(python3.10 -c ' *)",
+      "Bash(/usr/bin/python3 -c ' *)",
+      "Read(///wsl.localhost/Ubuntu/usr/**)",
+      "Read(///wsl.localhost/Ubuntu/usr/local/**)",
+      "Bash(conda info *)",
+      "Bash(awk -F, 'NR>1{print $NF}' ./data/vegetation_health/plant_health_data.csv)",
+      "Bash(awk -F',' 'NR>1{print $2}' ./data/vegetation_health/plant_health_data.csv)"
+    ]
+  }
+}
