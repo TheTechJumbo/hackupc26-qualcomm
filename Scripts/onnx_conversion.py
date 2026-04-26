@@ -1,10 +1,11 @@
 """
 ONNX Conversion — exports both models to ONNX for Edge Impulse ingestion.
 
-Part A: RandomForest (sklearn)  → models/tabular_rf_model.onnx
-Part B: YOLOv8 roadside model   → models/vision_roadside_model.onnx
-Part C: YOLOv8 trash model      → models/trash_model.onnx
+Part A: RandomForest (sklearn)   → models/tabular_rf_model.onnx  (disabled)
+Part B: YOLO11 roadside model    → models/vision_roadside_model.onnx
+Part C: YOLO11 trash model       → models/trash_model.onnx
 
+Upload Part B and Part C to Edge Impulse → Object Detection (YOLOv11).
 Edge Impulse accepts ONNX at opset 12; all exports use that version.
 """
 
@@ -97,7 +98,7 @@ def main() -> None:
 
     # --- Part A: Tabular RandomForest ---
     log.info("--- Part A: Tabular RF → ONNX ---")
-    convert_sensor_model(cfg["sensor_model"], onnx_cfg, out_dir, log)
+    #convert_sensor_model(cfg["sensor_model"], onnx_cfg, out_dir, log)
 
     # --- Part B: Roadside vision model ---
     log.info("--- Part B: Roadside Vision Model → ONNX ---")
@@ -108,8 +109,8 @@ def main() -> None:
     # --- Part C: Trash model ---
     log.info("--- Part C: Trash Model → ONNX ---")
     tc = cfg["trash_model"]
-    trash_weights = ROOT / tc["project"] / tc["name"] / "weights" / "best.pt"
-    convert_yolo_model(trash_weights, out_dir / "trash_model.onnx", onnx_cfg, log)
+    #trash_weights = ROOT / tc["project"] / tc["name"] / "weights" / "best.pt"
+    #convert_yolo_model(trash_weights, out_dir / "trash_model.onnx", onnx_cfg, log)
 
     log.info("=== onnx_conversion.py complete ===")
     log.info("Edge Impulse models ready in: %s", out_dir)

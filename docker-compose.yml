@@ -1,7 +1,7 @@
 services:
   training:
     build: .
-    # GPU passthrough — requires nvidia-container-toolkit in WSL2
+    # GPU passthrough -- requires nvidia-container-toolkit in WSL2
     deploy:
       resources:
         reservations:
@@ -9,6 +9,10 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    # PyTorch DataLoader workers share tensors via /dev/shm. Docker's default is
+    # 64 MB -- far too small for multi-worker image loading at 640px batch size.
+    # 2 GB covers both vision (batch=16, workers=4) and trash (batch=8, workers=2).
+    shm_size: '2g'
     volumes:
       # Mount data, models, and run outputs so they persist outside the container
       - ./data:/app/data

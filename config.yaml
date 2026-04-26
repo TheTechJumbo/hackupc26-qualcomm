@@ -7,7 +7,7 @@ gpu:
   half: true     # FP16 mixed precision — safe on RTX 3060 12GB
 
 vision_model:
-  base_model: yolov8n-seg.pt
+  base_model: yolo11n.pt
   data: data/urban_landcover/building-facade-segmentation-augmention-1/data.yaml
   epochs: 30
   imgsz: 640
@@ -17,12 +17,12 @@ vision_model:
   name: roadside_model
 
 trash_model:
-  base_model: yolov8n-seg.pt   # fine-tune from COCO pretrained nano-seg
+  base_model: yolo11n.pt
   data: data/TACO/TACO-1/data.yaml
   epochs: 25
   imgsz: 640
   batch: 8        # 59 classes = larger heads; 8 is safe on 12 GB with FP16
-  workers: 4
+  workers: 2      # 3375 images x 59 classes needs less shm pressure than vision
   project: vision_runs
   name: trash_model
 
@@ -49,5 +49,5 @@ sensor_model:
 
 onnx:
   opset: 12       # Qualcomm NPU / Edge Impulse compatible opset
-  simplify: true
+  simplify: false  # onnxsim crashes (double-free in tcache) with onnxruntime==1.18.0
   output_dir: models

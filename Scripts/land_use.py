@@ -4,6 +4,8 @@ Outputs: vision_runs/roadside_model/weights/best.pt
          models/vision_roadside_weights.pt  (copy for Edge Impulse handoff)
 """
 
+import argparse
+import json
 import logging
 import shutil
 import sys
@@ -37,6 +39,15 @@ def resolve_device(cfg_device: str) -> str:
     return cfg_device
 
 
+def infer(image_path: Path, model) -> dict:
+    """Return whether the scene is suitable for planting (no building facade detected)."""
+    results = model.predict(str(image_path), verbose=False)
+    r = results[0]
+    has_facade = r.boxes is not None and len(r.boxes) > 0
+    confidence = round(float(r.boxes.conf.max().item()), 4) if has_facade else None
+    return {"suitable_for_planting": not has_facade, "confidence": confidence}
+
+
 def log_gpu_info(log: logging.Logger) -> None:
     if torch.cuda.is_available():
         name = torch.cuda.get_device_name(0)
@@ -49,8 +60,21 @@ def log_gpu_info(log: logging.Logger) -> None:
 def main() -> None:
     from ultralytics import YOLO  # noqa: PLC0415
 
+    parser = argparse.ArgumentParser(description="Building facade segmentation — train or infer")
+    parser.add_argument("--infer", metavar="IMAGE", help="Run inference on IMAGE and print JSON result")
+    args = parser.parse_args()
+
     with open(CONFIG_PATH) as f:
         cfg = yaml.safe_load(f)
+
+    if args.infer:
+        weights = ROOT / cfg["project"]["output_dir"] / "vision_roadside_weights.pt"
+        if not weights.exists():
+            print(f"[ERROR] Weights not found: {weights}", file=sys.stderr)
+            sys.exit(1)
+        model = YOLO(str(weights))
+        print(json.dumps(infer(Path(args.infer), model)))
+        return
 
     log = setup_logging(ROOT / "logs")
     log.info("=== Building Facade Segmentation Training ===")
