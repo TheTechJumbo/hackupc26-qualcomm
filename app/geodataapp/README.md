@@ -1,17 +1,14 @@
-# geodataapp
+# Urban Resilience - Mobile App Interface
 
-A new Flutter project.
+## What is this?
+This Flutter application is the mobile companion to the **Urban Resilience Edge Node** hardware project. 
 
-## Getting Started
+While the physical Arduino sensor handles scanning the street environment for extreme microclimates and bio-hazards, this app acts as the essential bridge between the hardware and our cloud map.
 
-This project is a starting point for a Flutter application.
+## The Point of the App
+This application exists to do three specific things in the background:
+1. **Listen:** It connects to the Arduino via Bluetooth Low Energy (BLE) to receive live JSON data (Temperature, Humidity, and a calculated Bio-Decay Toxicity Score).
+2. **Locate:** It grabs the user's exact GPS coordinates from the phone and attaches them to the incoming sensor data.
+3. **Sync:** It securely pushes the complete, location-tagged payload up to our Supabase database so city operators can see a live map of urban hazards.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+*Note: This repository contains only the Flutter mobile application. The C++ hardware sketches and cloud database configurations are managed as part of the broader project ecosystem.*
