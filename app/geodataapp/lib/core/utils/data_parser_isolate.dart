@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Data passed to the isolate
 class ParsingTask {
   final String rawBleData;
@@ -11,35 +13,41 @@ class ParsingTask {
   });
 }
 
-/// The isolate entry point function
-/// MUST be a top-level function or static method to be used with compute()
+/// The isolate entry point function.
+/// MUST be a top-level function or static method to be used with compute().
+///
+/// The Arduino sends a JSON object like:
+///   {"humidity_percent": 42.5, "temperature_c": 27.5, "timestamp": "...", "toxicity_level": "medium", "trash_detected": true}
+///
+/// This function decodes it, merges in the phone's GPS coordinates, and
+/// returns a flat Map that the DatabaseService can insert directly.
 Map<String, dynamic>? parseBlePayload(ParsingTask task) {
   try {
-    // Example format: Tag:Trash|Conf:0.85
-    final raw = task.rawBleData;
-    
-    // Simple parsing logic
-    final parts = raw.split('|');
-    if (parts.length != 2) return null;
+    final raw = task.rawBleData.trim();
+    print('ISOLATE: Parsing raw payload: $raw');
 
-    final tagPart = parts[0].split(':');
-    final confPart = parts[1].split(':');
+    // Decode the JSON string from the Arduino
+    final decoded = jsonDecode(raw);
 
-    if (tagPart.length != 2 || confPart.length != 2) return null;
+    // REASON: The Arduino sends a JSON *object* (Map), not an array.
+    // We must check the type and handle it as a Map.
+    if (decoded is! Map<String, dynamic>) {
+      print('ISOLATE Error: Expected a JSON object but got ${decoded.runtimeType}');
+      return null;
+    }
 
-    final tag = tagPart[1];
-    final confidence = double.tryParse(confPart[1]) ?? 0.0;
-
-    // Construct the payload to send to Firestore
-    return {
-      'lat': task.latitude,
-      'lng': task.longitude,
-      'tag': tag,
-      'confidence': confidence,
-      'timestamp': DateTime.now().toIso8601String(), // We will override this with FieldValue.serverTimestamp() before uploading
+    // Merge the phone's GPS coordinates into the Arduino's payload.
+    // REASON: The Arduino does not have GPS — the phone provides lat/lng.
+    final payload = <String, dynamic>{
+      ...decoded,               // spread all Arduino fields with their original keys
+      'latitude': task.latitude,
+      'longitude': task.longitude,
     };
+
+    print('ISOLATE: Successfully built payload: $payload');
+    return payload;
   } catch (e) {
-    // If parsing fails, return null
+    print('ISOLATE Error: Failed to parse payload: $e');
     return null;
   }
 }

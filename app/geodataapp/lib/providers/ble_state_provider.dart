@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../core/constants/ble_constants.dart';
+import '../data/services/ble_service.dart';
 
 // Providers for general BLE states
 final bluetoothStateProvider = StreamProvider<BluetoothAdapterState>((ref) {
@@ -39,12 +41,11 @@ final edgeNodeDeviceProvider = StreamProvider<BluetoothDevice?>((ref) async* {
   });
 
   // We emit the currently connected device if any, or wait.
-  // Actually, listening to FlutterBluePlus.connectedDevices might be better
-  // to track connection states directly.
-  
   yield* Stream.periodic(const Duration(seconds: 1), (_) {
     if (connectedDevice != null && !connectedDevice!.isConnected) {
+      debugPrint('Background: Device disconnected — disabling background execution');
       connectedDevice = null;
+      BleService.disableBackground();
     }
     return connectedDevice;
   });
